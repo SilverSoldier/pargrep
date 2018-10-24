@@ -16,12 +16,6 @@ static struct argp_option options[] = {
 static error_t parse_opt(int key, char* arg, struct argp_state *state){
   struct arguments *arguments = state->input;
   switch(key){
-	case 'v':
-	  printf("%s\n", pargrep_program_version);
-	  break;
-	case 'h':
-	  printf("%s\n", doc);
-	  argp_usage(state);
 	case 'r':
 	  arguments->recursive = 1;
 	  break;
