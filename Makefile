@@ -1,6 +1,10 @@
-all: pargrep.c grep_cuda.cu args.c
-	gcc pargrep.c args.c -c
-	nvcc grep_cuda.cu pargrep.o args.o -o pargrep
+objects = main.o args.o
+
+all: $(objects)
+	nvcc grep_cuda.cu $(objects) -o pargrep
+
+%.o: %.c %.h
+	nvcc -x c -I. -dc $< -o $@
 
 c: pargrep.c args.c
 	gcc pargrep.c args.c -o pargrep

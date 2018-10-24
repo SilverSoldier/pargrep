@@ -10,7 +10,8 @@ static char doc[] =
 static char args_doc[] = "PATTERN [FILE]...";
 
 static struct argp_option options[] = {
-  { "recursive", 'r', 0, 0, "Recursively search directories." }
+  { "recursive", 'r', 0, 0, "Recursively search directories." },
+  { 0 }
 };
 
 static error_t parse_opt(int key, char* arg, struct argp_state *state){
