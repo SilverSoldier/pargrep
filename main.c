@@ -7,13 +7,13 @@
 #define MAX_FILE_SIZE 1 << 30
 
 int main(int argc, char *argv[]) {
-  struct arguments* arguments;
-  parse_options(argc, argv, arguments);
+  struct arguments arguments;
+  parse_options(argc, argv, &arguments);
 
   char** files;
   int file_count;
 
-  for(int j = 0; arguments->files[j]; j++)
+  for(int j = 0; arguments.files[j]; j++)
 	file_count++;
 
   /* Load the files into memory */
