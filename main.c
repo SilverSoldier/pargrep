@@ -19,10 +19,11 @@ int main(int argc, char *argv[]) {
   /* Load the files into memory */
   files = (char**) malloc(file_count * sizeof(char*));
   for(int j = 0; j < file_count; j++){
-	/* files[j] = (char*) malloc(MAX_FILE_SIZE); */
-	/* FILE* fp = fopen(arguments.files[j], "r"); */
-	/* fread((void*) files[j], sizeof(char), MAX_FILE_SIZE, fp); */
-	/* fclose(fp); */
+	files[j] = (char*) malloc(MAX_FILE_SIZE);
+	FILE* fp = fopen(arguments.files[j], "r");
+	/* First read of data */
+	fread((void*) files[j], sizeof(char), MAX_FILE_SIZE, fp);
+	fclose(fp);
   }
 
   /* Creation and initialization of device related variables */
@@ -30,7 +31,7 @@ int main(int argc, char *argv[]) {
   // Copy files into device memory
 
   // Call the GPU handler
-  parallel_grep();
+  parallel_grep(files, file_count, arguments.pattern);
 
   return 0;
 }
