@@ -7,18 +7,21 @@ extern "C" {
 
 #define MAX_FILE_SIZE 1 << 30
 
-__global__ void grep_kernel(char** contents, int* count){
+typedef struct search_result {
+  char context[30];
+  int line;
+  int file;
+} res;
+
+__global__ void grep_kernel(char** contents, res** results){
   int idx = threadIdx.x + blockIdx.x*blockDim.x;
   /* Let's count lines */
-  count[idx] = 0;
-  for(int i = 0; contents[idx][i] != '\0'; i++){
-	if(contents[idx][i] == '\n')
-	  count[idx]++;
-  }
+  results[0][0].line = 10;
+  results[0][0].file = 0;
 }
 
 extern "C" void parallel_grep(char** content, int n_files, char* pattern){
-  /* Each thread takes a file */
+  /* Copying file related data to device memory */
   char** device_contents;
   char** temp = (char**) malloc(n_files * sizeof(char*));
   cudaMalloc(&device_contents, n_files * sizeof(char*));
@@ -29,18 +32,19 @@ extern "C" void parallel_grep(char** content, int n_files, char* pattern){
 	cudaMemcpy(device_contents + i, &(temp[i]), sizeof(char*), cudaMemcpyHostToDevice);
   }
 
-  int* count_host = (int*) calloc(n_files, sizeof(int));
-  int* count_device;
-  cudaMalloc((void**)&count_device, n_files * sizeof(int));
+  /* Creating an array of array of results - one array for each thread doing computation */
+  res** results;
+  cudaMallocManaged(&results, n_files * sizeof(res*));
+  for(int i = 0; i < n_files; i++){
+	cudaMallocManaged(&(results[i]), 1000 * sizeof(res));
+  }
 
-  cudaMemcpy(count_device, count_host, n_files * sizeof(int), cudaMemcpyHostToDevice);
-  
-  grep_kernel <<< 1, n_files >>> (device_contents, count_device);
+  grep_kernel <<< 1, n_files >>> (device_contents, results);
 
-  cudaMemcpy(count_host, count_device, n_files * sizeof(int), cudaMemcpyDeviceToHost);
+  cudaDeviceSynchronize();
 
   for(int i = 0; i < n_files; i++)
-	printf("%d ", count_host[i]);
+	printf("%d ", results[0][0].line);
   printf("\n");
 }
 
