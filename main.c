@@ -31,7 +31,7 @@ int main(int argc, char *argv[]) {
   // Copy files into device memory
 
   // Call the GPU handler
-  parallel_grep(files, file_count, arguments.pattern);
+  parallel_grep(arguments.files, files, file_count, arguments.pattern);
 
   return 0;
 }
