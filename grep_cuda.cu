@@ -34,10 +34,10 @@ __global__ void grep_kernel(char** contents, res** results, int* results_size, c
 	  results[res_idx]->context[29] = '\0';
 	  results[idx][res_idx].file = idx;
 	  results[idx][res_idx].line = line;
-	  results_size[idx]++;
-	  /*   res_idx++; */
+	  res_idx++;
 	}
   }
+	  results_size[idx] = res_idx;
 }
 
 extern "C" void parallel_grep(char** file_names, char** content, int n_files, char* pattern){
@@ -74,9 +74,8 @@ extern "C" void parallel_grep(char** file_names, char** content, int n_files, ch
   for(int i = 0; i < n_files; i++)
 	for(int j = 0; j < results_size[i]; j++){
 	  res result = results[i][j];
-	printf("%s:%d:%s", file_names[result.file], result.line, result.context);
+	printf("%s:%d:%s\n", file_names[result.file], result.line, result.context);
 	}
-  printf("\n");
 }
 
 __global__ void test_kernel(int* A){
