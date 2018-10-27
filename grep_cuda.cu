@@ -30,8 +30,8 @@ __global__ void grep_kernel(char** contents, res** results, int* results_size, c
 	  valid &= (c == p);
 	}
 	if(valid){
-	  memcpy((void*)&(results[res_idx]->context[res_idx]), (void*)&(contents[idx][i-15]), 30);
-	  results[res_idx]->context[29] = '\0';
+	  memcpy((void*)&(results[idx][res_idx].context), (void*)&(contents[idx][i-15]), 30);
+	  results[idx][res_idx].context[29] = '\0';
 	  results[idx][res_idx].file = idx;
 	  results[idx][res_idx].line = line;
 	  res_idx++;
@@ -74,7 +74,7 @@ extern "C" void parallel_grep(char** file_names, char** content, int n_files, ch
   for(int i = 0; i < n_files; i++)
 	for(int j = 0; j < results_size[i]; j++){
 	  res result = results[i][j];
-	printf("%s:%d:%s\n", file_names[result.file], result.line, result.context);
+	  printf("%s:%d:%s\n", file_names[result.file], result.line, result.context);
 	}
 }
 
