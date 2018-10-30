@@ -8,7 +8,7 @@ extern "C" {
 #define MAX_FILE_SIZE 1 << 30
 
 typedef struct search_result {
-  char context[30];
+  char* context;
   int line;
   int file;
 } res;
@@ -16,28 +16,42 @@ typedef struct search_result {
 __global__ void grep_kernel(char** contents, res** results, int* results_size, const char* pattern){
   int idx = threadIdx.x + blockIdx.x*blockDim.x;
   int res_idx = 0;
-  int valid;
+  uint8_t valid;
   int line = 1;
+
+  /* Local variables that keep track of the start and end of the context */
+  int out_before = -1;
+  uint8_t matched = 0;
+
   /* Read the ith file, check for pattern and write to result */
   for(int i = 0; contents[idx][i] != '\0'; i++){
+	char c = contents[idx][i];
 	valid = 1;
-	line += (contents[idx][i] == '\n');
+	line += (c == '\n');
+	if(matched && (c == '\n')){
+	  /* Copy context from the previous newline character to the present character */
+	  /* NOTE: Each line is only counted once - irrespective of number of occurances */
+	  memcpy(results[idx][res_idx].context, &contents[idx][out_before+1], i - out_before - 1);
+	  results[idx][res_idx].file = idx;
+	  results[idx][res_idx].line = line - 1;
+	  res_idx += 1;
+	  matched = 0;
+	}
+	/* Complicated way of avoiding control divergence to keep track of the previous new line occurance */
+	out_before = out_before * (c != '\n') + i * (c == '\n');
+
 	for(int j = 0; pattern[j] != '\0'; j++){
 	  char c = contents[idx][i+j];
 	  char p = pattern[j];
 	  if(c == '\0')
 		break;
+	  /* Could break at this stage - not sure if there will be any gain due to control divergence */
 	  valid &= (c == p);
 	}
-	if(valid){
-	  memcpy((void*)&(results[idx][res_idx].context), (void*)&(contents[idx][i-15]), 30);
-	  results[idx][res_idx].context[29] = '\0';
-	  results[idx][res_idx].file = idx;
-	  results[idx][res_idx].line = line;
-	  res_idx++;
-	}
+	/* Need to remember whether some valid match occured on this line before - so || to not lose previous data */
+	matched = matched || (valid != 0);
   }
-	  results_size[idx] = res_idx;
+  results_size[idx] = res_idx;
 }
 
 extern "C" void parallel_grep(char** file_names, char** content, int n_files, char* pattern){
@@ -64,6 +78,8 @@ extern "C" void parallel_grep(char** file_names, char** content, int n_files, ch
   cudaMallocManaged(&results_size, n_files * sizeof(int));
   for(int i = 0; i < n_files; i++){
 	cudaMallocManaged(&(results[i]), 1000 * sizeof(res));
+	for(int j = 0; j < 1000; j++)
+	  cudaMallocManaged(&(results[i][j].context), 100);
 	results_size[i] = 0;
   }
 
