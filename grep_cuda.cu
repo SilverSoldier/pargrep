@@ -54,15 +54,14 @@ __global__ void grep_kernel(char** contents, res** results, int* results_size, c
   results_size[idx] = res_idx;
 }
 
-extern "C" void parallel_grep(char** file_names, char** content, int n_files, char* pattern){
+extern "C" void parallel_grep(char** file_names, file_info* info, int n_files, char* pattern){
   /* Copying file related data to device memory */
   char** device_contents;
   char** temp = (char**) malloc(n_files * sizeof(char*));
   cudaMalloc(&device_contents, n_files * sizeof(char*));
   for(int i = 0; i < n_files; i++){
 	cudaMalloc(&temp[i], MAX_FILE_SIZE * sizeof(char));
-	/* Second read of data - This is wasteful */
-	cudaMemcpy(temp[i], content[i], strlen(content[i]) * sizeof(char), cudaMemcpyHostToDevice);
+	cudaMemcpy(temp[i], info[i].mmap, info[i].size, cudaMemcpyHostToDevice);
 	cudaMemcpy(device_contents + i, &(temp[i]), sizeof(char*), cudaMemcpyHostToDevice);
   }
 
@@ -77,6 +76,7 @@ extern "C" void parallel_grep(char** file_names, char** content, int n_files, ch
   cudaMallocManaged(&results, n_files * sizeof(res*));
   cudaMallocManaged(&results_size, n_files * sizeof(int));
   for(int i = 0; i < n_files; i++){
+	/* TODO 2 */
 	cudaMallocManaged(&(results[i]), 1000 * sizeof(res));
 	for(int j = 0; j < 1000; j++)
 	  cudaMallocManaged(&(results[i][j].context), 100);

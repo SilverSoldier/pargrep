@@ -1,6 +1,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include "args.h"
 #include "grep_cuda.h"
 
@@ -10,25 +13,24 @@ int main(int argc, char *argv[]) {
   struct arguments arguments;
   parse_options(argc, argv, &arguments);
 
-  char** files;
-  int file_count;
+  file_info* files;
+  int file_count = 0;
 
   for(int j = 0; arguments.files[j]; j++)
 	file_count++;
 
   /* Load the files into memory */
-  files = (char**) malloc(file_count * sizeof(char*));
+  /* TODO 2 */
+  files = (file_info*) malloc(file_count * sizeof(file_info));
   for(int j = 0; j < file_count; j++){
-	files[j] = (char*) malloc(MAX_FILE_SIZE);
 	FILE* fp = fopen(arguments.files[j], "r");
-	/* First read of data */
-	fread((void*) files[j], sizeof(char), MAX_FILE_SIZE, fp);
+	int fd = fileno(fp);
+	struct stat sb;
+	fstat(fd, &sb);
+	files[j].mmap = (char*) mmap(0, sb.st_size, PROT_READ, MAP_SHARED, fd, 0);
+	files[j].size = sb.st_size;
 	fclose(fp);
   }
-
-  /* Creation and initialization of device related variables */
-
-  // Copy files into device memory
 
   // Call the GPU handler
   parallel_grep(arguments.files, files, file_count, arguments.pattern);

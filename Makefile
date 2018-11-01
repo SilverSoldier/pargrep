@@ -6,5 +6,5 @@ all: $(objects)
 %.o: %.c %.h
 	nvcc -x c -I. -dc $< -o $@
 
-c: pargrep.c args.c
-	gcc pargrep.c args.c -o pargrep
+c: main.c args.c file.h
+	gcc -std=gnu99 -g main.c args.c file.h -o main
