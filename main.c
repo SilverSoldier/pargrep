@@ -20,7 +20,6 @@ int main(int argc, char *argv[]) {
 	file_count++;
 
   /* Load the files into memory */
-  /* TODO 2 */
   files = (file_info*) malloc(file_count * sizeof(file_info));
   for(int j = 0; j < file_count; j++){
 	FILE* fp = fopen(arguments.files[j], "r");
