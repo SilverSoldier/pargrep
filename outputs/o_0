@@ -1,0 +1,16 @@
+__global__ void grep_kernel(char** contents, res*** results, const char* pattern, int file_no){
+  /* Read the ith file, check for pattern and write to result */
+  char* start = &(contents[file_no][threadIdx.x * CHUNK]);
+  res* result_loc = &(results[file_no][threadIdx.x][0]);
+extern "C" void parallel_grep(char** file_names, file_info* info, int n_files, char* pattern){
+  /* Copying file related data to device memory */
+  char** temp = (char**) malloc(n_files * sizeof(char*));
+  cudaMalloc(&device_contents, n_files * sizeof(char*));
+  cudaStream_t streams[n_files];
+  for(int i = 0; i < n_files; i++){
+  int* threads_size = (int*) malloc(n_files * sizeof(int));
+  /* First pointer to index the file being grepped */
+  cudaMallocManaged(&results, n_files * sizeof(res**));
+  for(int i = 0; i < n_files; i++){
+  for(int i = 0; i < n_files; i++){
+  for(int i = 0; i < n_files; i++){
