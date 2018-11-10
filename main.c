@@ -5,7 +5,9 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include "args.h"
-#include "grep_cuda.h"
+#include "fixed_pattern.h"
+#include "regex.h"
+#include "nfa.h"
 
 #define MAX_FILE_SIZE 1 << 30
 
@@ -31,8 +33,30 @@ int main(int argc, char *argv[]) {
 	fclose(fp);
   }
 
-  // Call the GPU handler
-  parallel_grep(arguments.files, files, file_count, arguments.pattern);
+  if(arguments.regex == 0){
+	/* Fixed string */
+	/* fixed_pattern_match(arguments.files, files, file_count, arguments.pattern); */
+  } else {
+	/* Regex pattern */
+	char *post;
+	State *start, *matchstate;
+
+	re2post(arguments.pattern);
+
+	if(post == NULL){
+	  fprintf(stderr, "bad regexp %s\n", argv[1]);
+	  return 1;
+	}
+
+	start = post2nfa(post, matchstate);
+	if(start == NULL){
+	  fprintf(stderr, "error in post2nfa %s\n", post);
+	  return 1;
+	}
+
+	regex_match(arguments.files, files, file_count, start);
+
+  }
 
   return 0;
 }

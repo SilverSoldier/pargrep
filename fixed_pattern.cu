@@ -2,7 +2,7 @@
 #include <cuda.h>
 
 extern "C" {
-#include "grep_cuda.h"
+#include "fixed_pattern.h"
 }
 
 #define MAX_FILE_SIZE 1 << 30
@@ -14,7 +14,7 @@ typedef struct search_result {
   int line;
 } res;
 
-__global__ void grep_kernel(char** contents, res*** results, const char* pattern, int file_no){
+__global__ void fixed_pattern_kernel(char** contents, res*** results, const char* pattern, int file_no){
   int res_idx = 0;
   uint8_t valid;
   int line = 1;
@@ -68,7 +68,7 @@ __global__ void grep_kernel(char** contents, res*** results, const char* pattern
   }
 }
 
-extern "C" void parallel_grep(char** file_names, file_info* info, int n_files, char* pattern){
+extern "C" void fixed_pattern_match(char** file_names, file_info* info, int n_files, char* pattern){
   /* Copying file related data to device memory */
   char** device_contents;
   char** temp = (char**) malloc(n_files * sizeof(char*));
@@ -76,14 +76,15 @@ extern "C" void parallel_grep(char** file_names, file_info* info, int n_files, c
 
   cudaStream_t streams[n_files];
   for(int i = 0; i < n_files; i++){
+	cudaHostRegister(info[i].mmap, info[i].size, 0);
 	cudaMalloc(&temp[i], MAX_FILE_SIZE * sizeof(char));
-	cudaMemcpy(temp[i], info[i].mmap, info[i].size, cudaMemcpyHostToDevice);
-	cudaMemcpy(device_contents + i, &(temp[i]), sizeof(char*), cudaMemcpyHostToDevice);
+	/* cudaMemcpy(temp[i], info[i].mmap, info[i].size, cudaMemcpyHostToDevice); */
+	/* cudaMemcpy(device_contents + i, &(temp[i]), sizeof(char*), cudaMemcpyHostToDevice); */
 	cudaStreamCreate(&streams[i]);
 	/* cudaMallocHost(&(info[i].mmap), (size_t) info[i].size); */
 	/* cudaMallocHost(&temp[i], info[i].size); */
-	/* cudaMemcpyAsync(temp[i], info[i].mmap, info[i].size, cudaMemcpyHostToDevice, streams[i]); */
-	/* cudaMemcpyAsync(device_contents + i, &(temp[i]), sizeof(char*), cudaMemcpyHostToDevice, streams[i]); */
+	cudaMemcpyAsync(temp[i], info[i].mmap, info[i].size, cudaMemcpyHostToDevice, streams[i]);
+	cudaMemcpyAsync(device_contents + i, &(temp[i]), sizeof(char*), cudaMemcpyHostToDevice, streams[i]);
   }
 
   /* Copying the pattern to device memory */
@@ -112,9 +113,9 @@ extern "C" void parallel_grep(char** file_names, file_info* info, int n_files, c
   }
 
   for(int i = 0; i < n_files; i++){
-	grep_kernel <<< 1, threads_size[i], 0, streams[i] >>> (device_contents, results, device_pattern, i);
+	fixed_pattern_kernel <<< 1, threads_size[i], 0, streams[i] >>> (device_contents, results, device_pattern, i);
 	/* Unpinning the memory */
-	/* cudaFreeHost(info[i].mmap); */
+	cudaHostUnregister(info[i].mmap);
   }
 
   cudaDeviceSynchronize();
