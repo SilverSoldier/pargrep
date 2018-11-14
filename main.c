@@ -7,7 +7,6 @@
 #include "args.h"
 #include "fixed_pattern.h"
 #include "regex.h"
-#include "nfa.h"
 
 #define MAX_FILE_SIZE 1 << 30
 
@@ -33,30 +32,13 @@ int main(int argc, char *argv[]) {
 	fclose(fp);
   }
 
-  if(arguments.regex == 0){
-	/* Fixed string */
-	/* fixed_pattern_match(arguments.files, files, file_count, arguments.pattern); */
-  } else {
-	/* Regex pattern */
-	char *post;
-	State *start, *matchstate;
+  /* if(arguments.regex == 0){ */
+  /* /1* Fixed string *1/ */
+  /* /1* fixed_pattern_match(arguments.files, files, file_count, arguments.pattern); *1/ */
+  /* } else { */
+  regex_match(arguments.files, files, file_count, arguments.pattern);
 
-	re2post(arguments.pattern);
-
-	if(post == NULL){
-	  fprintf(stderr, "bad regexp %s\n", argv[1]);
-	  return 1;
-	}
-
-	start = post2nfa(post, matchstate);
-	if(start == NULL){
-	  fprintf(stderr, "error in post2nfa %s\n", post);
-	  return 1;
-	}
-
-	regex_match(arguments.files, files, file_count, start);
-
-  }
+  /* } */
 
   return 0;
 }

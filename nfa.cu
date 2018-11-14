@@ -17,16 +17,20 @@
 #include <unistd.h>
 #include "nfa.h"
 
+int nstate;
+
+__device__ static int listid;
+__device__ List l1, l2;
+
 /*
  * Convert infix regexp re to postfix notation.
  * Insert . as explicit concatenation operator.
  * Cheesy parser, return static buffer.
  */
   char*
-re2post(char *re)
+re2post(char *re, char* buf)
 {
   int nalt, natom;
-  static char buf[8000];
   char *dst;
   struct {
 	int nalt;
@@ -102,8 +106,7 @@ re2post(char *re)
   return buf;
 }
 
-/* State matchstate = { Match };	/1* matching state *1/ */
-int nstate;
+/* __device__ State matchstate = { Match };	/1* matching state *1/ */
 
 /* Allocate and initialize State */
   State*
@@ -112,7 +115,7 @@ state(int c, State *out, State *out1)
   State *s;
 
   nstate++;
-  s = malloc(sizeof *s);
+  cudaMallocManaged(&s, sizeof(s));
   s->lastlist = 0;
   s->c = c;
   s->out = out;
@@ -175,8 +178,6 @@ post2nfa(char *postfix, State* matchstate)
   Frag stack[1000], *stackp, e1, e2, e;
   State *s;
 
-  // fprintf(stderr, "postfix: %s\n", postfix);
-
   if(postfix == NULL)
 	return NULL;
 
@@ -232,7 +233,80 @@ post2nfa(char *postfix, State* matchstate)
 #undef push
 }
 
-/* if(match(start, argv[i])) */
+/* Compute initial state list */
+__device__ List* startlist(State *start, List *l) {
+  l->n = 0;
+  listid++;
+  addstate(l, start);
+  return l;
+}
+
+/* Check whether state list contains a match. */
+__device__ int ismatch(List *l, State* matchstate) {
+  int i;
+
+  for(i=0; i<l->n; i++)
+	if(l->s[i] == matchstate)
+	  return 1;
+  return 0;
+}
+
+/* Add s to l, following unlabeled arrows. */
+__device__ void addstate(List *l, State *s) {
+  if(s == NULL || s->lastlist == listid)
+	return;
+  s->lastlist = listid;
+  if(s->c == Split){
+	/* follow unlabeled arrows */
+	addstate(l, s->out);
+	addstate(l, s->out1);
+	return;
+  }
+  l->s[l->n++] = s;
+}
+
+/*
+ * Step the NFA from the states in clist
+ * past the character c,
+ * to create next NFA state set nlist.
+ */
+__device__ void step(List *clist, int c, List *nlist) {
+  int i;
+  State *s;
+
+  listid++;
+  nlist->n = 0;
+  for(i=0; i<clist->n; i++){
+	s = clist->s[i];
+	if(s->c == c)
+	  addstate(nlist, s->out);
+  }
+}
+
+/* Run NFA to determine whether it matches s. */
+extern __device__ int match(State *start, char *s, State* matchstate, int nstate) {
+  int i, c;
+  List *clist, *nlist, *t;
+
+  l1.s = (State**) malloc(nstate * sizeof(l1.s[0]));
+  l2.s = (State**) malloc(nstate * sizeof(l2.s[0]));
+
+  clist = startlist(start, &l1);
+  nlist = &l2;
+  for(; *s && *s != '\n' && *s != '\0'; s++){
+	c = *s & 0xFF;
+	step(clist, c, nlist);
+	t = clist; clist = nlist; nlist = t;	/* swap clist, nlist */
+	if(ismatch(clist, matchstate)){
+	  free(l1.s);
+	  free(l2.s);
+	  return 1;
+	}
+  }
+  free(l1.s);
+  free(l2.s);
+  return ismatch(clist, matchstate);
+}
 
 /*
  * Permission is hereby granted, free of charge, to any person

@@ -1,5 +1,8 @@
 #ifndef NFA_H
 #define NFA_H 
+
+extern int nstate;
+
 /*
  * Represents an NFA state plus zero or one or two arrows exiting.
  * if c == Match, no arrows out; matching state.
@@ -34,6 +37,16 @@ struct Frag
   Ptrlist *out;
 };
 
+typedef struct List List;
+
+struct List
+{
+  State **s;
+  int n;
+};
+
+extern __device__ List l1, l2;
+
 /*
  * Since the out pointers in the list are always
  * uninitialized, we use the pointers themselves
@@ -45,15 +58,13 @@ union Ptrlist
   State *s;
 };
 
-typedef struct List List;
-struct List
-{
-  State **s;
-  int n;
-};
-
 /* Function declarations */
-char* re2post(char *re);
+extern "C" char* re2post(char *re, char* buf);
 
-State* post2nfa(char *postfix, State* matchstate);
+extern "C" State* post2nfa(char *postfix, State* matchstate);
+
+__device__ void addstate(List *l, State *s);
+
+extern "C" __device__ int match(State *start, char *s, State* matchstate, int nstate);
+
 #endif /* ifndef NFA_H */
