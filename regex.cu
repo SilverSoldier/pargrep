@@ -17,7 +17,6 @@ typedef struct search_result {
 
 __global__ void regex_kernel(char** contents, res*** results, State* start_state, int file_no, State* matchstate, int nstate){
   int res_idx = 0;
-  uint8_t valid;
   int line = 1;
 
   /* Local variables that keep track of the start and end of the context */
@@ -32,10 +31,7 @@ __global__ void regex_kernel(char** contents, res*** results, State* start_state
 
   int i;
   for(i = 0; i < threadIdx.x * CHUNK && *(start-i) != '\n'; i++);
-  out_before = -1 * i;
-
-  /* valid = match(start_state, start, matchstate, nstate); */
-  /* results[0][0][0].line = valid; */
+  out_before = -1 * i - (i == 0);
 
   for(i = 0; i < CHUNK && ((c = *(start + i)) != '\0'); i++){
 	line += (c == '\n');
@@ -50,16 +46,16 @@ __global__ void regex_kernel(char** contents, res*** results, State* start_state
 	  matched = 0;
 	}
 
-	/* Complicated way of avoiding control divergence to keep track of the previous new line occurance */
+	/* /1* Complicated way of avoiding control divergence to keep track of the previous new line occurance *1/ */
 	out_before = out_before * (c != '\n') + i * (c == '\n');
 
 	/* Need to remember whether some valid match occured on this line before - so || to not lose previous data */
-	matched |= match(start_state, (start + i), matchstate, nstate);
+	matched += match(start_state, (start + i), matchstate, nstate);
   }
 
   /* There might be some matched string still waiting to find its ending newline character */
   if(matched){
-	for(; (c = *(start + i) != '\n'); i++);
+	for(; (c = *(start + i) != '\n' && c != '\0'); i++);
 	memcpy((result_loc + res_idx)->context, (void*)(start + out_before+1), i - out_before - 1);
 	(result_loc + res_idx)->line = line - 1;
   }
@@ -135,15 +131,13 @@ extern "C" void regex_match(char** file_names, file_info* info, int n_files, cha
 
   cudaDeviceSynchronize();
 
-  printf("%d\n", results[0][0][0].line);
-
   res result;
   for(int i = 0; i < n_files; i++){
 	for(int j = 0; j < threads_size[i]; j++){
 	  for(int k = 0; k < 20; k++){
 		result = results[i][j][k];
 		if(result.line != 0)
-		  printf("%s\n", result.context);
+		  printf("%s:%s\n", file_names[i], result.context);
 	  }
 	}
   }

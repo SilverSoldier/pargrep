@@ -34,7 +34,7 @@ int main(int argc, char *argv[]) {
 
   /* if(arguments.regex == 0){ */
   /* /1* Fixed string *1/ */
-  /* /1* fixed_pattern_match(arguments.files, files, file_count, arguments.pattern); *1/ */
+  /* fixed_pattern_match(arguments.files, files, file_count, arguments.pattern); */
   /* } else { */
   regex_match(arguments.files, files, file_count, arguments.pattern);
 

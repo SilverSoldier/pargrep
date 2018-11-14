@@ -255,13 +255,16 @@ __device__ int ismatch(List *l, State* matchstate) {
 __device__ void addstate(List *l, State *s) {
   if(s == NULL || s->lastlist == listid)
 	return;
+  int temp = s->lastlist;
   s->lastlist = listid;
   if(s->c == Split){
 	/* follow unlabeled arrows */
 	addstate(l, s->out);
 	addstate(l, s->out1);
+	s->lastlist = temp;
 	return;
   }
+  s->lastlist = temp;
   l->s[l->n++] = s;
 }
 
@@ -285,7 +288,7 @@ __device__ void step(List *clist, int c, List *nlist) {
 
 /* Run NFA to determine whether it matches s. */
 extern __device__ int match(State *start, char *s, State* matchstate, int nstate) {
-  int i, c;
+  int c;
   List *clist, *nlist, *t;
 
   l1.s = (State**) malloc(nstate * sizeof(l1.s[0]));
