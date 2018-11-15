@@ -32,13 +32,12 @@ int main(int argc, char *argv[]) {
 	fclose(fp);
   }
 
-  /* if(arguments.regex == 0){ */
-  /* /1* Fixed string *1/ */
-  /* fixed_pattern_match(arguments.files, files, file_count, arguments.pattern); */
-  /* } else { */
-  regex_match(arguments.files, files, file_count, arguments.pattern);
-
-  /* } */
+  if(arguments.regex == 0){
+	/* Fixed string */
+	fixed_pattern_match(arguments.files, files, file_count, arguments.pattern);
+  } else {
+	regex_match(arguments.files, files, file_count, arguments.pattern);
+  }
 
   return 0;
 }
