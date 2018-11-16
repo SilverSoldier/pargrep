@@ -134,6 +134,9 @@ extern "C" void fixed_pattern_match(char** file_names, file_info* info, int n_fi
   cudaFree(results);
   cudaFree(device_contents);
   cudaFree(device_pattern);
+
+  for(int i = 0; i < n_files; i++)
+	cudaStreamDestroy(streams[i]);
 }
 
 __global__ void test_kernel(int* A){

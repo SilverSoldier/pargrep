@@ -7,7 +7,7 @@ extern "C" {
 }
 
 #define MAX_FILE_SIZE 1 << 30
-const int CHUNK = 5000;
+const int CHUNK = 4 << 15;
 const int MAX_CONTEXT_SIZE = 500;
 const int N_RESULTS = 50;
 
@@ -73,17 +73,17 @@ extern "C" void regex_match(char** file_names, file_info* info, int n_files, cha
   char** temp = (char**) malloc(n_files * sizeof(char*));
   cudaMalloc(&device_contents, n_files * sizeof(char*));
 
-  /* cudaStream_t streams[n_files]; */
+  cudaStream_t streams[n_files];
   for(int i = 0; i < n_files; i++){
-	cudaMalloc(&temp[i], MAX_FILE_SIZE * sizeof(char));
-	cudaMemcpy(temp[i], info[i].mmap, info[i].size, cudaMemcpyHostToDevice);
-	cudaMemcpy(device_contents + i, &(temp[i]), sizeof(char*), cudaMemcpyHostToDevice);
+	/* cudaMalloc(&temp[i], MAX_FILE_SIZE * sizeof(char)); */
+	/* cudaMemcpy(temp[i], info[i].mmap, info[i].size, cudaMemcpyHostToDevice); */
+	/* cudaMemcpy(device_contents + i, &(temp[i]), sizeof(char*), cudaMemcpyHostToDevice); */
 
-	/* cudaStreamCreate(&streams[i]); */
-	/* cudaHostRegister(info[i].mmap, info[i].size, 0); */
-	/* cudaMallocHost(&temp[i], info[i].size); */
-	/* cudaMemcpyAsync(temp[i], info[i].mmap, info[i].size, cudaMemcpyHostToDevice, streams[i]); */
-	/* cudaMemcpyAsync(device_contents + i, &(temp[i]), sizeof(char*), cudaMemcpyHostToDevice, streams[i]); */
+	cudaStreamCreate(&streams[i]);
+	cudaHostRegister(info[i].mmap, info[i].size, 0);
+	cudaMallocHost(&temp[i], info[i].size);
+	cudaMemcpyAsync(temp[i], info[i].mmap, info[i].size, cudaMemcpyHostToDevice, streams[i]);
+	cudaMemcpyAsync(device_contents + i, &(temp[i]), sizeof(char*), cudaMemcpyHostToDevice, streams[i]);
   }
 
   /* Creating an array of array of array of results: */
@@ -107,9 +107,9 @@ extern "C" void regex_match(char** file_names, file_info* info, int n_files, cha
   }
 
   for(int i = 0; i < n_files; i++){
-	regex_kernel <<< 1, threads_size[i] >>> (device_contents, results, re_pattern, i);
+	regex_kernel <<< 1, threads_size[i], 0, streams[i] >>> (device_contents, results, re_pattern, i);
 	/* Unpinning the memory */
-	/* cudaHostUnregister(info[i].mmap); */
+	cudaHostUnregister(info[i].mmap);
   }
 
   cudaDeviceSynchronize();
@@ -127,5 +127,10 @@ extern "C" void regex_match(char** file_names, file_info* info, int n_files, cha
 	  }
 	}
   }
+
+  cudaFree(results);
+  cudaFree(device_contents);
+  cudaFree(re_pattern);
+
 }
 

@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <fcntl.h>
 #include "args.h"
 #include "fixed_pattern.h"
@@ -11,6 +12,9 @@
 #define MAX_FILE_SIZE 1 << 30
 
 int main(int argc, char *argv[]) {
+  struct timeval start, end;
+
+  gettimeofday(&start, NULL);
   struct arguments arguments;
   parse_options(argc, argv, &arguments);
 
@@ -38,6 +42,9 @@ int main(int argc, char *argv[]) {
   } else {
 	regex_match(arguments.files, files, file_count, arguments.pattern);
   }
+  gettimeofday(&end, NULL);
+
+  printf("%d:%ld\n", (end.tv_sec - start.tv_sec), (end.tv_usec - start.tv_usec));
 
   return 0;
 }
