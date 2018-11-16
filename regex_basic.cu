@@ -9,14 +9,13 @@ extern "C" {
 #define MAX_FILE_SIZE 1 << 30
 const int CHUNK = 5000;
 const int MAX_CONTEXT_SIZE = 500;
-const int N_RESULTS = 50;
 
 typedef struct search_result {
   char* context;
   int line;
 } res;
 
-__global__ void regex_kernel(char** contents, res*** results, re_t pattern, int file_no){
+__global__ void regex_kernel(char** contents, res*** results, State* start_state, int file_no, State* matchstate, int nstate){
   int res_idx = 0;
   int line = 1;
 
@@ -47,26 +46,44 @@ __global__ void regex_kernel(char** contents, res*** results, re_t pattern, int 
 	  matched = 0;
 	}
 
-	/* Complicated way of avoiding control divergence to keep track of the previous new line occurance */
+	/* /1* Complicated way of avoiding control divergence to keep track of the previous new line occurance *1/ */
 	out_before = out_before * (c != '\n') + i * (c == '\n');
 
 	/* Need to remember whether some valid match occured on this line before - so || to not lose previous data */
-	matched += re_matchp(pattern, (start + i));
+	matched += match(start_state, (start + i), matchstate, nstate);
   }
 
   /* There might be some matched string still waiting to find its ending newline character */
   if(matched){
-  for(; (c = *(start + i) != '\n' && c != '\0'); i++);
-  memcpy((result_loc + res_idx)->context, (void*)(start + out_before+1), i - out_before - 1);
-  (result_loc + res_idx)->line = line - 1;
+	for(; (c = *(start + i) != '\n' && c != '\0'); i++);
+	memcpy((result_loc + res_idx)->context, (void*)(start + out_before+1), i - out_before - 1);
+	(result_loc + res_idx)->line = line - 1;
   }
 }
 
 extern "C" void regex_match(char** file_names, file_info* info, int n_files, char* pattern){
 
-  re_t re_pattern = re_compile(pattern);
+  char *post = (char*) malloc(8000 * sizeof(char));
+  State *start, *matchstate;
+  cudaMallocManaged(&start, sizeof(State));
+  cudaMallocManaged(&matchstate, sizeof(State));
+  matchstate->c = Match;
+  matchstate->out = NULL;
+  matchstate->out1 = NULL;
+  matchstate->lastlist = 0;
 
-  /* re_print(re_pattern); */
+  re2post(pattern, post);
+
+  if(post == NULL){
+	fprintf(stderr, "bad regexp %s\n", pattern);
+	return;
+  }
+
+  start = post2nfa(post, matchstate);
+  if(start == NULL){
+	fprintf(stderr, "error in post2nfa %s\n", post);
+	return;
+  }
 
   /* Copying file related data to device memory */
   char** device_contents;
@@ -99,33 +116,29 @@ extern "C" void regex_match(char** file_names, file_info* info, int n_files, cha
 	for(int j = 0; j < n_chunks; j++){
 	  /* Third to index the result that the thread found */
 	  /* TODO: Fourth to index the dynamic array for that result which will have a next pointer */
-	  cudaMallocManaged(&(results[i][j]), N_RESULTS * sizeof(res));
-	  for(int k = 0; k < N_RESULTS; k++){
+	  cudaMallocManaged(&(results[i][j]), 50 * sizeof(res));
+	  for(int k = 0; k < 50; k++){
 		cudaMallocManaged(&(results[i][j][k].context), MAX_CONTEXT_SIZE);
 	  }
 	}
   }
 
   for(int i = 0; i < n_files; i++){
-	regex_kernel <<< 1, threads_size[i] >>> (device_contents, results, re_pattern, i);
+	regex_kernel <<< 1, threads_size[i] >>> (device_contents, results, start, i, matchstate, nstate);
 	/* Unpinning the memory */
 	/* cudaHostUnregister(info[i].mmap); */
   }
 
   cudaDeviceSynchronize();
 
-  /* printf("%s\n", cudaGetErrorString(cudaPeekAtLastError())); */
-  /* printf("%d\n", results[0][0][0].line); */
-
   res result;
   for(int i = 0; i < n_files; i++){
 	for(int j = 0; j < threads_size[i]; j++){
-	  for(int k = 0; k < N_RESULTS; k++){
+	  for(int k = 0; k < 20; k++){
 		result = results[i][j][k];
 		if(result.line != 0)
-		  printf("%s\n", result.context);
+		  printf("%s:%s\n", file_names[i], result.context);
 	  }
 	}
   }
 }
-
