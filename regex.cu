@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <cuda.h>
+#include <sys/time.h>
 
 extern "C" {
 #include "regex.h"
@@ -7,9 +8,10 @@ extern "C" {
 }
 
 #define MAX_FILE_SIZE 1 << 30
-const int CHUNK = 4 << 15;
+const int CHUNK = 1 << 14;
 const int MAX_CONTEXT_SIZE = 500;
 const int N_RESULTS = 50;
+const int MAX_THREADS_PER_BLOCK = 1024;
 
 typedef struct search_result {
   char* context;
@@ -31,7 +33,7 @@ __global__ void regex_kernel(char** contents, res*** results, re_t pattern, int 
   char c;
 
   int i;
-  for(i = 0; i < threadIdx.x * CHUNK && *(start-i) != '\n'; i++);
+  for(i = 0; i < threadIdx.x * CHUNK && *(start-i) != '\n' && *(start-i) != '\0'; i++);
   out_before = -1 * i - (i == 0);
 
   for(i = 0; i < CHUNK && ((c = *(start + i)) != '\0'); i++){
@@ -56,15 +58,16 @@ __global__ void regex_kernel(char** contents, res*** results, re_t pattern, int 
 
   /* There might be some matched string still waiting to find its ending newline character */
   if(matched){
-  for(; (c = *(start + i) != '\n' && c != '\0'); i++);
-  memcpy((result_loc + res_idx)->context, (void*)(start + out_before+1), i - out_before - 1);
-  (result_loc + res_idx)->line = line - 1;
+	for(; (c = *(start + i) != '\n' && c != '\0'); i++);
+	memcpy((result_loc + res_idx)->context, (void*)(start + out_before+1), i - out_before - 1);
+	(result_loc + res_idx)->line = line - 1;
   }
 }
 
 extern "C" void regex_match(char** file_names, file_info* info, int n_files, char* pattern){
 
-  re_t re_pattern = re_compile(pattern);
+  struct timeval start, end;
+  gettimeofday(&start, NULL);
 
   /* re_print(re_pattern); */
 
@@ -85,6 +88,9 @@ extern "C" void regex_match(char** file_names, file_info* info, int n_files, cha
 	cudaMemcpyAsync(temp[i], info[i].mmap, info[i].size, cudaMemcpyHostToDevice, streams[i]);
 	cudaMemcpyAsync(device_contents + i, &(temp[i]), sizeof(char*), cudaMemcpyHostToDevice, streams[i]);
   }
+
+  re_t re_pattern = re_compile(pattern);
+  gettimeofday(&end, NULL);
 
   /* Creating an array of array of array of results: */
   res*** results;
@@ -107,12 +113,19 @@ extern "C" void regex_match(char** file_names, file_info* info, int n_files, cha
   }
 
   for(int i = 0; i < n_files; i++){
-	regex_kernel <<< 1, threads_size[i], 0, streams[i] >>> (device_contents, results, re_pattern, i);
+	if(threads_size[i] > MAX_THREADS_PER_BLOCK){
+	  int n_blocks = threads_size[i]/MAX_THREADS_PER_BLOCK + 1;
+	  regex_kernel <<< n_blocks, MAX_THREADS_PER_BLOCK, 0, streams[i] >>> (device_contents, results, re_pattern, i);
+	}
+	else{
+	  regex_kernel <<< 1, threads_size[i], 0, streams[i] >>> (device_contents, results, re_pattern, i);
+	}
 	/* Unpinning the memory */
 	cudaHostUnregister(info[i].mmap);
   }
 
   cudaDeviceSynchronize();
+
 
   /* printf("%s\n", cudaGetErrorString(cudaPeekAtLastError())); */
   /* printf("%d\n", results[0][0][0].line); */
@@ -132,5 +145,6 @@ extern "C" void regex_match(char** file_names, file_info* info, int n_files, cha
   cudaFree(device_contents);
   cudaFree(re_pattern);
 
+  printf("Kernel: %f\n", (end.tv_sec - start.tv_sec) * 1000 + (end.tv_usec - start.tv_usec)/(double)1000);
 }
 

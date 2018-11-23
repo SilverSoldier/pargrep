@@ -11,6 +11,7 @@ static char args_doc[] = "PATTERN [FILE]...";
 
 static struct argp_option options[] = {
   { "regex", 'r', 0, 0, "Regex pattern." },
+  { "fixed", 'f', 0, 0, "Fixed pattern." },
   { 0 }
 };
 
@@ -20,6 +21,10 @@ static error_t parse_opt(int key, char* arg, struct argp_state *state){
   switch(key){
 	case 'r':
 	  arguments->regex = 1;
+	  break;
+
+	case 'f':
+	  arguments->fixed = 1;
 	  break;
 
 	case ARGP_KEY_NO_ARGS:

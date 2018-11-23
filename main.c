@@ -14,7 +14,6 @@
 int main(int argc, char *argv[]) {
   struct timeval start, end;
 
-  gettimeofday(&start, NULL);
   struct arguments arguments;
   parse_options(argc, argv, &arguments);
 
@@ -36,7 +35,8 @@ int main(int argc, char *argv[]) {
 	fclose(fp);
   }
 
-  if(arguments.regex == 0){
+  gettimeofday(&start, NULL);
+  if(arguments.fixed == 1){
 	/* Fixed string */
 	fixed_pattern_match(arguments.files, files, file_count, arguments.pattern);
   } else {
@@ -44,7 +44,7 @@ int main(int argc, char *argv[]) {
   }
   gettimeofday(&end, NULL);
 
-  printf("%d:%ld\n", (end.tv_sec - start.tv_sec), (end.tv_usec - start.tv_usec));
+  printf("%f\n", (end.tv_sec - start.tv_sec) * 1000 + (end.tv_usec - start.tv_usec)/(double)1000);
 
   return 0;
 }

@@ -1,12 +1,13 @@
 #include <stdio.h>
 #include <cuda.h>
+#include <sys/time.h>
 
 extern "C" {
 #include "fixed_pattern.h"
 }
 
 #define MAX_FILE_SIZE 1 << 30
-const int CHUNK = 4 << 15;
+const int CHUNK = 1 << 11;
 const int MAX_CONTEXT_SIZE = 500;
 const int N_RESULTS = 150;
 
@@ -31,7 +32,7 @@ __global__ void fixed_pattern_kernel(char** contents, res*** results, const char
   char c;
 
   int i;
-  for(i = 0; i < threadIdx.x * CHUNK && *(start-i) != '\n'; i++);
+  for(i = 0; i < threadIdx.x * CHUNK && *(start-i) != '\n' && *(start-i) != '\0'; i++);
   out_before = -1 * i;
 
   for(i = 0; i < CHUNK && ((c = *(start + i)) != '\0'); i++){
@@ -63,7 +64,7 @@ __global__ void fixed_pattern_kernel(char** contents, res*** results, const char
 
   /* There might be some matched string still waiting to find its ending newline character */
   if(matched){
-	for(; (c = *(start + i) != '\n'); i++);
+	for(; ((c = *(start + i)) != '\n') && (c != '\0'); i++);
 	memcpy((result_loc + res_idx)->context, (void*)(start + out_before+1), i - out_before - 1);
 	(result_loc + res_idx)->line = line - 1;
   }
@@ -75,19 +76,23 @@ extern "C" void fixed_pattern_match(char** file_names, file_info* info, int n_fi
   char** temp = (char**) malloc(n_files * sizeof(char*));
   cudaMalloc(&device_contents, n_files * sizeof(char*));
 
-  cudaStream_t streams[n_files];
+  struct timeval start, end;
+
+  gettimeofday(&start, NULL);
+  /* cudaStream_t streams[n_files]; */
   for(int i = 0; i < n_files; i++){
 	cudaMalloc(&temp[i], info[i].size * sizeof(char));
 	cudaMemcpy(temp[i], info[i].mmap, info[i].size, cudaMemcpyHostToDevice);
 	cudaMemcpy(device_contents + i, &(temp[i]), sizeof(char*), cudaMemcpyHostToDevice);
 
-	/* cudaHostRegister(info[i].mmap, info[i].size, 0); */
 	/* cudaStreamCreate(&streams[i]); */
+	/* cudaHostRegister(info[i].mmap, info[i].size, 0); */
+	/* cudaMallocHost(&temp[i], info[i].size); */
 	/* cudaMemcpyAsync(temp[i], info[i].mmap, info[i].size, cudaMemcpyHostToDevice, streams[i]); */
 	/* cudaMemcpyAsync(device_contents + i, &(temp[i]), sizeof(char*), cudaMemcpyHostToDevice, streams[i]); */
-	/* Unpinning the memory */
-	/* cudaHostUnregister(info[i].mmap); */
   }
+
+  gettimeofday(&end, NULL);
 
   /* Copying the pattern to device memory */
   char* device_pattern;
@@ -116,6 +121,8 @@ extern "C" void fixed_pattern_match(char** file_names, file_info* info, int n_fi
 
   for(int i = 0; i < n_files; i++){
 	fixed_pattern_kernel <<< 1, threads_size[i] >>> (device_contents, results, device_pattern, i);
+	/* Unpinning the memory */
+	/* cudaHostUnregister(info[i].mmap); */
   }
 
   cudaDeviceSynchronize();
@@ -131,12 +138,15 @@ extern "C" void fixed_pattern_match(char** file_names, file_info* info, int n_fi
 	}
   }
 
+
   cudaFree(results);
   cudaFree(device_contents);
   cudaFree(device_pattern);
 
-  for(int i = 0; i < n_files; i++)
-	cudaStreamDestroy(streams[i]);
+  /* for(int i = 0; i < n_files; i++) */
+  /* cudaStreamDestroy(streams[i]); */
+
+  printf("%f\n", (end.tv_sec - start.tv_sec) * 1000 + (end.tv_usec - start.tv_usec)/(double)1000);
 }
 
 __global__ void test_kernel(int* A){
