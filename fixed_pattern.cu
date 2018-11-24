@@ -16,7 +16,7 @@ typedef struct search_result {
   int line;
 } res;
 
-__global__ void fixed_pattern_kernel(char** contents, res*** results, const char* pattern, int file_no){
+__global__ void fixed_pattern_kernel(char** contents, res*** results, const char*__restrict__ pattern, int file_no){
   int res_idx = 0;
   uint8_t valid;
   int line = 1;

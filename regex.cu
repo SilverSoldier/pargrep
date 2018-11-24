@@ -18,7 +18,7 @@ typedef struct search_result {
   int line;
 } res;
 
-__global__ void regex_kernel(char** contents, res*** results, re_t pattern, int file_no){
+__global__ void regex_kernel(char** contents, res*** results, const re_t __restrict__ pattern, int file_no){
   int res_idx = 0;
   int line = 1;
 
