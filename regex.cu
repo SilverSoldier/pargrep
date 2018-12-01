@@ -8,9 +8,9 @@ extern "C" {
 }
 
 #define MAX_FILE_SIZE 1 << 30
-const int CHUNK = 1 << 14;
+const int CHUNK = 1 << 15;
 const int MAX_CONTEXT_SIZE = 500;
-const int N_RESULTS = 50;
+const int N_RESULTS = 150;
 const int MAX_THREADS_PER_BLOCK = 1024;
 
 typedef struct search_result {
@@ -66,11 +66,6 @@ __global__ void regex_kernel(char** contents, res*** results, const re_t __restr
 
 extern "C" void regex_match(char** file_names, file_info* info, int n_files, char* pattern){
 
-  struct timeval start, end;
-  gettimeofday(&start, NULL);
-
-  /* re_print(re_pattern); */
-
   /* Copying file related data to device memory */
   char** device_contents;
   char** temp = (char**) malloc(n_files * sizeof(char*));
@@ -90,7 +85,6 @@ extern "C" void regex_match(char** file_names, file_info* info, int n_files, cha
   }
 
   re_t re_pattern = re_compile(pattern);
-  gettimeofday(&end, NULL);
 
   /* Creating an array of array of array of results: */
   res*** results;
@@ -112,10 +106,16 @@ extern "C" void regex_match(char** file_names, file_info* info, int n_files, cha
 	}
   }
 
+  cudaEvent_t start, stop;
+  cudaEventCreate(&start);
+  cudaEventCreate(&stop);
+
   for(int i = 0; i < n_files; i++){
 	if(threads_size[i] > MAX_THREADS_PER_BLOCK){
+	  cudaEventRecord(start, streams[0]);
 	  int n_blocks = threads_size[i]/MAX_THREADS_PER_BLOCK + 1;
 	  regex_kernel <<< n_blocks, MAX_THREADS_PER_BLOCK, 0, streams[i] >>> (device_contents, results, re_pattern, i);
+	  cudaEventRecord(stop, streams[0]);
 	}
 	else{
 	  regex_kernel <<< 1, threads_size[i], 0, streams[i] >>> (device_contents, results, re_pattern, i);
@@ -124,11 +124,13 @@ extern "C" void regex_match(char** file_names, file_info* info, int n_files, cha
 	cudaHostUnregister(info[i].mmap);
   }
 
+  cudaEventSynchronize(stop);
+  float milliseconds = 0;
+  cudaEventElapsedTime(&milliseconds, start, stop);
+
+  printf("Kernel: %f\n", milliseconds);
+
   cudaDeviceSynchronize();
-
-
-  /* printf("%s\n", cudaGetErrorString(cudaPeekAtLastError())); */
-  /* printf("%d\n", results[0][0][0].line); */
 
   res result;
   for(int i = 0; i < n_files; i++){
@@ -145,6 +147,6 @@ extern "C" void regex_match(char** file_names, file_info* info, int n_files, cha
   cudaFree(device_contents);
   cudaFree(re_pattern);
 
-  printf("Kernel: %f\n", (end.tv_sec - start.tv_sec) * 1000 + (end.tv_usec - start.tv_usec)/(double)1000);
+  /* printf("Kernel: %f\n", (end.tv_sec - start.tv_sec) * 1000 + (end.tv_usec - start.tv_usec)/(double)1000); */
 }
 

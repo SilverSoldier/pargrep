@@ -7,9 +7,10 @@ extern "C" {
 }
 
 #define MAX_FILE_SIZE 1 << 30
-const int CHUNK = 1 << 11;
+const int CHUNK = 1 << 14;
 const int MAX_CONTEXT_SIZE = 500;
 const int N_RESULTS = 150;
+const int MAX_THREADS_PER_BLOCK = 1024;
 
 typedef struct search_result {
   char* context;
@@ -76,23 +77,18 @@ extern "C" void fixed_pattern_match(char** file_names, file_info* info, int n_fi
   char** temp = (char**) malloc(n_files * sizeof(char*));
   cudaMalloc(&device_contents, n_files * sizeof(char*));
 
-  struct timeval start, end;
-
-  gettimeofday(&start, NULL);
-  /* cudaStream_t streams[n_files]; */
+  cudaStream_t streams[n_files];
   for(int i = 0; i < n_files; i++){
-	cudaMalloc(&temp[i], info[i].size * sizeof(char));
-	cudaMemcpy(temp[i], info[i].mmap, info[i].size, cudaMemcpyHostToDevice);
-	cudaMemcpy(device_contents + i, &(temp[i]), sizeof(char*), cudaMemcpyHostToDevice);
+	/* cudaMalloc(&temp[i], info[i].size * sizeof(char)); */
+	/* cudaMemcpy(temp[i], info[i].mmap, info[i].size, cudaMemcpyHostToDevice); */
+	/* cudaMemcpy(device_contents + i, &(temp[i]), sizeof(char*), cudaMemcpyHostToDevice); */
 
-	/* cudaStreamCreate(&streams[i]); */
-	/* cudaHostRegister(info[i].mmap, info[i].size, 0); */
-	/* cudaMallocHost(&temp[i], info[i].size); */
-	/* cudaMemcpyAsync(temp[i], info[i].mmap, info[i].size, cudaMemcpyHostToDevice, streams[i]); */
-	/* cudaMemcpyAsync(device_contents + i, &(temp[i]), sizeof(char*), cudaMemcpyHostToDevice, streams[i]); */
+	cudaStreamCreate(&streams[i]);
+	cudaHostRegister(info[i].mmap, info[i].size, 0);
+	cudaMallocHost(&temp[i], info[i].size);
+	cudaMemcpyAsync(temp[i], info[i].mmap, info[i].size, cudaMemcpyHostToDevice, streams[i]);
+	cudaMemcpyAsync(device_contents + i, &(temp[i]), sizeof(char*), cudaMemcpyHostToDevice, streams[i]);
   }
-
-  gettimeofday(&end, NULL);
 
   /* Copying the pattern to device memory */
   char* device_pattern;
@@ -119,11 +115,32 @@ extern "C" void fixed_pattern_match(char** file_names, file_info* info, int n_fi
 	}
   }
 
+  cudaEvent_t start, stop;
+  cudaEventCreate(&start);
+  cudaEventCreate(&stop);
+
   for(int i = 0; i < n_files; i++){
-	fixed_pattern_kernel <<< 1, threads_size[i] >>> (device_contents, results, device_pattern, i);
-	/* Unpinning the memory */
-	/* cudaHostUnregister(info[i].mmap); */
+	if(threads_size[i] > MAX_THREADS_PER_BLOCK){
+	  cudaEventRecord(start, streams[0]);
+	  int n_blocks = threads_size[i]/MAX_THREADS_PER_BLOCK + 1;
+	  fixed_pattern_kernel <<< n_blocks, MAX_THREADS_PER_BLOCK, 0, streams[i] >>> (device_contents, results, device_pattern, i);
+	  cudaEventRecord(stop, streams[0]);
+	  /* Unpinning the memory */
+	  cudaHostUnregister(info[i].mmap);
+	} else{
+	  /* cudaEventRecord(start, streams[0]); */
+	  fixed_pattern_kernel <<< 1, threads_size[i], 0, streams[i] >>> (device_contents, results, device_pattern, i);
+	  /* cudaEventRecord(stop, streams[0]); */
+	  /* Unpinning the memory */
+	  cudaHostUnregister(info[i].mmap);
+	}
   }
+
+  cudaEventSynchronize(stop);
+  float milliseconds = 0;
+  cudaEventElapsedTime(&milliseconds, start, stop);
+
+  printf("Kernel: %f", milliseconds);
 
   cudaDeviceSynchronize();
 
@@ -143,10 +160,8 @@ extern "C" void fixed_pattern_match(char** file_names, file_info* info, int n_fi
   cudaFree(device_contents);
   cudaFree(device_pattern);
 
-  /* for(int i = 0; i < n_files; i++) */
-  /* cudaStreamDestroy(streams[i]); */
-
-  printf("%f\n", (end.tv_sec - start.tv_sec) * 1000 + (end.tv_usec - start.tv_usec)/(double)1000);
+  for(int i = 0; i < n_files; i++)
+	cudaStreamDestroy(streams[i]);
 }
 
 __global__ void test_kernel(int* A){
